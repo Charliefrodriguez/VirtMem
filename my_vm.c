@@ -6,6 +6,11 @@ char * physBM; // null terminator has all bits set to zero
 char * virtBM;
 pde_t* pageDir; // ptr to front of pgdir
 
+
+
+
+
+
 /*
 Function responsible for allocating and setting your physical memory 
 */
