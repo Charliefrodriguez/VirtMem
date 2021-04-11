@@ -6,11 +6,6 @@ char * physBM; // null terminator has all bits set to zero
 char * virtBM;
 pde_t* pageDir; // ptr to front of pgdir
 
-
-
-
-
-
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -321,10 +316,23 @@ void get_value(void *va, void *val, int size) {
 	/* HINT: put the values pointed to by "va" inside the physical memory at given
 	 * "val" address. Assume you can access "val" directly by derefencing them.
 	 */
-
-
-
-
+	//check tlb first
+	unsigned int addr;
+	//if(/*the va is in tlb*/) {
+		//addr = tlb entry
+	//}else {
+		addr = *((unsigned int*)va);
+		unsigned int index1 = *pageDir + get_top_10_bits(addr);
+		unsigned int index2 = *pageDir + index1 + get_mid_10_bits(addr);
+		unsigned int index3 = (*pageDir + index2 + get_last_12_bits(addr));
+	//}
+	unsigned int storedData = 0;
+	for(int i = 0; i < size; ++i) {
+		storedData << 1;
+		storedData = storedData | (index3+i);
+	}
+	unsigned int* ptr = &storedData;
+	val = (void*)ptr;
 }
 
 
