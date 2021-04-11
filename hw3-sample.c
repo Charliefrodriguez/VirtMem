@@ -60,7 +60,7 @@ static unsigned int get_mid_bits (unsigned int value, int num_middle_bits, int n
 
 }
 
-//Example 3
+/Example 3
 //Function to set a bit at "index"
 // bitmap is a region where were store bitmap 
 static void set_bit_at_index(char *bitmap, int index)
@@ -82,7 +82,7 @@ static void set_bit_at_index(char *bitmap, int index)
 }
 
 
-//Example 3
+/Example 3
 //Function to get a bit at "index"
 static int get_bit_at_index(char *bitmap, int index)
 {

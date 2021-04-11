@@ -1,9 +1,9 @@
 #include "my_vm.h"
-
+#include<math.h>
 char* physMem = NULL;
-int* physBM;
-int* virtBM;
-pde_t* pageDir;
+char * physBM; // null terminator has all bits set to zero
+char * virtBM;
+pde_t* pageDir; // ptr to front of pgdir
 
 /*
 Function responsible for allocating and setting your physical memory 
@@ -19,19 +19,18 @@ void set_physical_mem() {
 	physMem = (char*)malloc(MEMSIZE);	
 	int p = 32 - (log2(PGSIZE)) ;
 	int v = MAX_MEMSIZE / PGSIZE;
-	int phys[p];
-	int virt[v];
 	int i;
+	
+	physBM = (char *)malloc(sizeof(char)*p);
+	virtBM = (char *)malloc(sizeof(char)*v);
+
 	for(i = 0; i < p; ++i) {
-		phys[i] = 0;
+		physBM[i] = '\0';
 	}
 	for(i = 0; i < v; ++i) {
-		virt[i] = 0;
+		virtBM[i] = '\0';
 	}
-	physBM = phys;
-	virtBM = virt;
 	pageDir = (pde_t*)(physMem);
-	*pageDir = 16;
 }
 
 
@@ -92,14 +91,27 @@ pte_t *translate(pde_t *pgdir, void *va) {
 	 * Part 2 HINT: Check the TLB before performing the translation. If
 	 * translation exists, then you can return physical address from the TLB.
 	 */
-	unsigned int addr = *(int*)va;
-	unsigned int top = get_top_10_bits(addr);
-	unsigned int mid = get_mid_10_bits(addr);
-	unsigned int bot = get_last_12_bits(addr);
-	unsigned int physAddr;
+	unsigned long addr = *(int*)va;
+	unsigned long top = get_top_10_bits(addr);
+	unsigned long mid = get_mid_10_bits(addr);
+	unsigned long bot = get_last_12_bits(addr);
+	
+
+	pde_t * dir_ptr = pgdir; 
+
+	dir_ptr += top; 
+
+	pte_t * pg_ptr = (pte_t *)(*dir_ptr); 
+
+	pg_ptr += mid; 
+
+
+	unsigned long pfn = (unsigned int)(*pg_ptr); 
+
+	return (pte_t *)((pfn  << 12) | bot);
 
 	//If translation not successfull
-	return NULL; 
+	///return NULL; 
 }
 
 
@@ -133,7 +145,95 @@ void *get_next_avail(int num_pages) {
    and used by the benchmark
  */
 void *a_malloc(unsigned int num_bytes) {
+	// does each malloc call get it's own entire physical page? That would seem pretty dumb but might have enough mem to pull off
+	if(physMem == NULL ){ 
+			set_physical_mem();
+			
 
+			unsigned int i  = 0; 
+
+			while(i<800){ // find open physical page
+						if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
+									set_bit_at_index(physBM, i); // set physical page bitmap  
+									break; 
+						}
+						i++; 
+					// initialize physical page 					
+		
+			}
+				
+				unsigned int pfn = i; //the page that we will link the addr too 
+				// assuming page dir starts at front of phy_mem 
+
+	
+				char * ptr = physMem; 
+				ptr = physMem + MEMSIZE-1 - 4096; // decrement backwards to create frist physical frame 
+				
+				unsigned long offset = 0; 
+				int j = 1;  
+				// find first open slot in first availible page table
+				for(j;j<524288;j++){	
+						if(get_bit_at_index(virtBM, j) == 0) { 
+							break;
+						}
+					} 
+					// decompose number into array matrix i,j values
+					unsigned int top = floor(j/4096); 
+					unsigned int mid =  j % 4096; 
+				
+					pde_t * dir_ptr = (pde_t *)physMem; 
+					
+					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);
+					
+					*(page_table_i+mid) = (pte_t)(pfn);
+				
+					*(dir_ptr+top) = (pde_t)page_table_i;			  // where does new page table begin
+	
+
+				return (void *)((((top << 10) | mid) << 12) | offset);
+	} 
+	else{ 
+		
+
+			unsigned int i  = 0; 
+
+			while(i<800){ // find open physical page
+						if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
+									set_bit_at_index(physBM, i); // set physical page bitmap  
+									break; 
+						}
+						i++; 
+					// initialize physical page 					
+		
+			}
+				
+				unsigned int pfn = i; //the page that we will link the addr too 
+
+				char * ptr = physMem; 
+				ptr = physMem + MEMSIZE-1 - i*4096;  // decrement backwards to next open physical frame 
+				
+				unsigned long offset = 0; 
+				int j = 1;  
+				// find first open slot in first availible page table
+				for(j;j<524288;j++){	
+						if(get_bit_at_index(virtBM, j) == 0) { 
+							break;
+						}
+					} 
+					// decompose number into array matrix i,j values
+					unsigned int top = floor(j/4096); 
+					unsigned int mid =  j % 4096; 
+						
+
+				return (void*)( (((top << 10) | mid) << 12) | offset );
+
+
+
+
+
+	}
+	
+	
 	/* 
 	 * HINT: If the physical memory is not yet initialized, then allocate and initialize.
 	 */
@@ -145,7 +245,7 @@ void *a_malloc(unsigned int num_bytes) {
 	 * have to mark which physical pages are used. 
 	 */
 
-	return NULL;
+//	return NULL;
 }
 
 /* Responsible for releasing one or more memory pages using virtual address (va)
@@ -233,10 +333,47 @@ static unsigned int get_last_12_bits(unsigned int value){
    mid_bits_value =  value &  outer_bits_mask;
    return mid_bits_value;
 
+} 
+
+
+//Function to set a bit at "index"
+// bitmap is a region where were store bitmap 
+static void set_bit_at_index(char *bitmap, int index)
+{
+    // We first find the location in the bitmap array where we want to set a bit
+    // Because each character can store 8 bits, using the "index", we find which 
+    // location in the character array should we set the bit to.
+    char *region = ((char *) bitmap) + (index / 8);
+    
+    // Now, we cannot just write one bit, but we can only write one character. 
+    // So, when we set the bit, we should not distrub other bits. 
+    // So, we create a mask and OR with existing values
+    char bit = 1 << (index % 8);
+
+    // just set the bit to 1. NOTE: If we want to free a bit (*bitmap_region &= ~bit;)
+    *region |= bit;
+   
+    return;
 }
 
 
+//Function to get a bit at "index"
+static int get_bit_at_index(char *bitmap, int index)
+{
+    //Same as example 3, get to the location in the character bitmap array
+    char *region = ((char *) bitmap) + (index / 8);
+    
+    //Create a value mask that we are going to check if bit is set or not
+    char bit = 1 << (index % 8);
+    
+    return (int)(*region >> (index % 8)) & 0x1;
+}
+
+
+
+
 int main() {
+	/*
 	printf("doin work\n");
 	set_physical_mem();
 	unsigned int num = 4028641856;
@@ -245,5 +382,8 @@ int main() {
 	printf("%ld\n", *((pde_t*)(pageDir)));
 	printf("%ld\n", *((pde_t*)(pageDir)+1));
 	translate(pageDir, (void*)n);
+	*/ 
+ a_malloc(1); 
+	
 	return 1;
 }

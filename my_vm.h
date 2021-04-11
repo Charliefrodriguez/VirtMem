@@ -51,5 +51,7 @@ void print_TLB_missrate();
 static unsigned int get_top_10_bits(unsigned int value);
 static unsigned int get_mid_10_bits(unsigned int value);
 static unsigned int get_last_12_bits(unsigned int value);
+static void set_bit_at_index(char *bitmap, int index);
+static int get_bit_at_index(char *bitmap, int index);
 
 #endif
