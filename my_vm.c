@@ -17,7 +17,7 @@ void set_physical_mem() {
     
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
-	physMem = (char*)malloc(MEMSIZE);	
+	physMem = (char*)malloc(sizeof(char) * MEMSIZE);	
 	int p = 32 - (log2(PGSIZE)) ;
 	int v = MAX_MEMSIZE / PGSIZE;
 	int i;
@@ -100,14 +100,14 @@ pte_t *translate(pde_t *pgdir, void *va) {
 
 	pde_t * dir_ptr = pgdir; 
 
-	dir_ptr += top; 
+	dir_ptr += top; // takes to proper page directory entry 
 
-	pte_t * pg_ptr = (pte_t *)(*dir_ptr); 
+	pte_t * pg_ptr = (pte_t *)(*dir_ptr); // derref page dir entry, that should be a pte_t ptr 
 
 	pg_ptr += mid; 
 
 
-	unsigned long pfn = (unsigned int)(*pg_ptr); 
+	unsigned long pfn = (unsigned long)(*pg_ptr); 
 
 	return (pte_t *)((pfn  << 12) | bot);
 
@@ -229,7 +229,7 @@ void *a_malloc(unsigned int num_bytes) {
 					
 					pde_t * dir_ptr = (pde_t *)physMem; 
 					
-					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025); 
+					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);// increments to where first page table starts
 
 /* 
 top represents the rows we need to jump, where each row represents some porition of the page table 
@@ -301,9 +301,12 @@ void put_value(void *va, void *val, int size) {
 				char * ptr = physMem; 
 				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
 				
+				char * input = (char *)val;
 				if(size < PGSIZE){ 
-				long * ptr_n = (long *)ptr;
-			    *ptr_n =  (long)val;
+				 
+				 	int i =0; 
+			 
+					memcpy((void *)ptr , val,size); // need to use this function here, and we are allowed to!
 				}
 
 
@@ -315,7 +318,8 @@ void get_value(void *va, void *val, int size) {
 
 	/* HINT: put the values pointed to by "va" inside the physical memory at given
 	 * "val" address. Assume you can access "val" directly by derefencing them.
-	 */
+	 */ 
+
 
 
 
@@ -417,8 +421,19 @@ int main() {
 // pte_t * output = translate( (pde_t *)physMem ,a_malloc(1)); 
 // pte_t * output1 = translate( (pde_t *)physMem ,a_malloc(1)); 
 // pte_t * output2 = translate( (pde_t *)physMem ,a_malloc(1)); 
+	int b = 27;
+	int * ptr; 
+	ptr = &b; 
 
-	put_value(a_malloc(4), (void *)27, 4); 
+	int a = 28;
+	int * ptr2; 
+	ptr2 = &a; 
+
+
+
+	put_value(a_malloc(4), (void *)ptr, sizeof(int *)); 
+	put_value(a_malloc(4), (void *)ptr2, sizeof(int *)); 
+
 
 
 	return 1;
