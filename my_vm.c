@@ -324,6 +324,23 @@ void get_value(void *va, void *val, int size) {
 
 
 
+	//check tlb first
+	unsigned int addr;
+	//if(/*the va is in tlb*/) {
+		//addr = tlb entry
+	//}else {
+		addr = *((unsigned int*)va);
+		unsigned int index1 = *pageDir + get_top_10_bits(addr);
+		unsigned int index2 = *pageDir + index1 + get_mid_10_bits(addr);
+		unsigned int index3 = (*pageDir + index2 + get_last_12_bits(addr));
+	//}
+	unsigned int storedData = 0;
+	for(int i = 0; i < size; ++i) {
+		storedData << 1;
+		storedData = storedData | (index3+i);
+	}
+	unsigned int* ptr = &storedData;
+	val = (void*)ptr;
 }
 
 
