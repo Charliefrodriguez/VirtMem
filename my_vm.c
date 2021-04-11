@@ -319,6 +319,22 @@ void get_value(void *va, void *val, int size) {
 	/* HINT: put the values pointed to by "va" inside the physical memory at given
 	 * "val" address. Assume you can access "val" directly by derefencing them.
 	 */ 
+	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+	
+	unsigned long pfn =  phys_addr >> 12; 
+
+
+				char * ptr = physMem; 
+				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
+				
+				char * input = (char *)val;
+				if(size < PGSIZE){ 
+				 
+				 	int i =0; 
+			 
+					memcpy(val,(void *)ptr , size); // need to use this function here, and we are allowed to!
+				}
+
 
 
 
@@ -407,20 +423,7 @@ static int get_bit_at_index(char *bitmap, int index)
 
 
 int main() {
-	/*
-	printf("doin work\n");
-	set_physical_mem();
-	unsigned int num = 4028641856;
-	unsigned int * n = &num;
-	*((pde_t*)(pageDir)+1) = 200; 
-	printf("%ld\n", *((pde_t*)(pageDir)));
-	printf("%ld\n", *((pde_t*)(pageDir)+1));
-	translate(pageDir, (void*)n);
-	*/ 
- 
-// pte_t * output = translate( (pde_t *)physMem ,a_malloc(1)); 
-// pte_t * output1 = translate( (pde_t *)physMem ,a_malloc(1)); 
-// pte_t * output2 = translate( (pde_t *)physMem ,a_malloc(1)); 
+/*
 	int b = 27;
 	int * ptr; 
 	ptr = &b; 
@@ -434,12 +437,43 @@ int main() {
 	ptr3 = &c; 
 
 
-	put_value(a_malloc(4), (void *)ptr, sizeof(int *)); 
+	void * output = a_malloc(4);  
+	
+	put_value(output, (void *)ptr, sizeof(int *)); 
+	
+	int * ret =  (int *)malloc(sizeof(int)); 
 
-	put_value(a_malloc(4), (void *)ptr2, sizeof(int *)); 
+	get_value(output,(void *)ret, sizeof(int *)); 
 	
-	put_value(a_malloc(4), (void *)ptr3, sizeof(int *)); 
+	printf("%d \n",*ret);
+
+	void * output2 =  a_malloc(4); 
+
+
+	put_value(output2, (void *)ptr2, sizeof(int *)); 
+
+	int * ret1 = (int *)malloc(sizeof(int)); // make sure that we malloc space, for what we need to store otherwise undefined behavior :( 
+
+	get_value(output2, (void *)ret1, sizeof(int *)); 
 	
+	printf("%d \n",*ret1);
+
+
+	void * output3  =  a_malloc(4);
+	
+	put_value(output3, (void *)ptr3, sizeof(int *)); 
+	
+		int * ret2 = (int *)malloc(sizeof(int)); 
+
+	get_value(output3, (void *)ret2, sizeof(int *)); 
+	
+	printf("%d \n",*ret2);
+*/ 
+
+void * output = a_malloc(12); 
+int arr[3] = {0,1,2};
+put_value(output, (void*)arr,sizeof(int *)); 
+
 
 	return 1;
 }
