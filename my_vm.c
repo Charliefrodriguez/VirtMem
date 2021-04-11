@@ -1,5 +1,6 @@
 #include "my_vm.h"
 #include<math.h>
+#include<string.h>
 char* physMem = NULL;
 char * physBM; // null terminator has all bits set to zero
 char * virtBM;
@@ -91,7 +92,7 @@ pte_t *translate(pde_t *pgdir, void *va) {
 	 * Part 2 HINT: Check the TLB before performing the translation. If
 	 * translation exists, then you can return physical address from the TLB.
 	 */
-	unsigned long addr = *(int*)va;
+	unsigned long addr = (unsigned long)va;
 	unsigned long top = get_top_10_bits(addr);
 	unsigned long mid = get_mid_10_bits(addr);
 	unsigned long bot = get_last_12_bits(addr);
@@ -150,7 +151,7 @@ void *a_malloc(unsigned int num_bytes) {
 			set_physical_mem();
 			
 
-			unsigned int i  = 0; 
+			unsigned int i  = 1; 
 
 			while(i<800){ // find open physical page
 						if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
@@ -174,6 +175,7 @@ void *a_malloc(unsigned int num_bytes) {
 				// find first open slot in first availible page table
 				for(j;j<524288;j++){	
 						if(get_bit_at_index(virtBM, j) == 0) { 
+								set_bit_at_index(virtBM, j);
 							break;
 						}
 					} 
@@ -195,7 +197,7 @@ void *a_malloc(unsigned int num_bytes) {
 	else{ 
 		
 
-			unsigned int i  = 0; 
+			unsigned int i  = 1; 
 
 			while(i<800){ // find open physical page
 						if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
@@ -217,13 +219,30 @@ void *a_malloc(unsigned int num_bytes) {
 				// find first open slot in first availible page table
 				for(j;j<524288;j++){	
 						if(get_bit_at_index(virtBM, j) == 0) { 
+								set_bit_at_index(virtBM, j);
 							break;
 						}
 					} 
 					// decompose number into array matrix i,j values
 					unsigned int top = floor(j/4096); 
 					unsigned int mid =  j % 4096; 
-						
+					
+					pde_t * dir_ptr = (pde_t *)physMem; 
+					
+					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025); 
+
+/* 
+top represents the rows we need to jump, where each row represents some porition of the page table 
+governed by a page directory entry, we jump in blocks of 2^12 because that is how many enties we can fit per page
+
+*/
+					page_table_i += 4096*top; 
+					
+					*(page_table_i+mid) = (pte_t)(pfn); // store pfn value in the page table entry 
+				
+					*(dir_ptr+top) = (pde_t)page_table_i;			  // store pointer to page_table_i in dir ptr
+	
+
 
 				return (void*)( (((top << 10) | mid) << 12) | offset );
 
@@ -274,7 +293,17 @@ void put_value(void *va, void *val, int size) {
 	 * function.
 	 */
 
+	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+	
+	unsigned long pfn =  phys_addr >> 12; 
 
+
+				char * ptr = physMem; 
+				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
+				
+				if(size < PGSIZE){ 
+ 							memcpy( (void *)ptr,  val, size);
+				}
 
 
 }
@@ -383,7 +412,13 @@ int main() {
 	printf("%ld\n", *((pde_t*)(pageDir)+1));
 	translate(pageDir, (void*)n);
 	*/ 
- a_malloc(1); 
-	
+ 
+// pte_t * output = translate( (pde_t *)physMem ,a_malloc(1)); 
+// pte_t * output1 = translate( (pde_t *)physMem ,a_malloc(1)); 
+// pte_t * output2 = translate( (pde_t *)physMem ,a_malloc(1)); 
+
+	put_value(a_malloc(1), (void *)('a'), 1); 
+
+
 	return 1;
 }
