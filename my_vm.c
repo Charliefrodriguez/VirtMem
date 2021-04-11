@@ -429,12 +429,17 @@ int main() {
 	int * ptr2; 
 	ptr2 = &a; 
 
+	int c = 29;
+	int * ptr3; 
+	ptr3 = &c; 
 
 
 	put_value(a_malloc(4), (void *)ptr, sizeof(int *)); 
+
 	put_value(a_malloc(4), (void *)ptr2, sizeof(int *)); 
-
-
+	
+	put_value(a_malloc(4), (void *)ptr3, sizeof(int *)); 
+	
 
 	return 1;
 }
