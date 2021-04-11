@@ -302,7 +302,8 @@ void put_value(void *va, void *val, int size) {
 				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
 				
 				if(size < PGSIZE){ 
- 							memcpy( (void *)ptr,  val, size);
+				long * ptr_n = (long *)ptr;
+			    *ptr_n =  (long)val;
 				}
 
 
@@ -417,7 +418,7 @@ int main() {
 // pte_t * output1 = translate( (pde_t *)physMem ,a_malloc(1)); 
 // pte_t * output2 = translate( (pde_t *)physMem ,a_malloc(1)); 
 
-	put_value(a_malloc(1), (void *)('a'), 1); 
+	put_value(a_malloc(4), (void *)27, 4); 
 
 
 	return 1;
