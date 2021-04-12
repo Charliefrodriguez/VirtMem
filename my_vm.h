@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <pthread.h>
 
 //Assume the address space is 32 bits, so the max memory size is 4GB
 //Page size is 4KB
@@ -11,6 +12,8 @@
 //Add any important includes here which you may need
 
 #define PGSIZE 4096
+
+#define TLB_ENTRIES 512
 
 // Maximum size of virtual memory
 #define MAX_MEMSIZE 4ULL*1024*1024*1024
@@ -32,7 +35,11 @@ struct tlb {
     * Think about the size of each TLB entry that performs virtual to physical
     * address translation.
     */
-
+int empty;
+    int lastIn;
+    unsigned int pfn;
+    unsigned int dirIndex;
+    unsigned int tableIndex;
 };
 struct tlb tlb_store;
 

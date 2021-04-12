@@ -5,7 +5,10 @@ char* physMem = NULL;
 char * physBM; // null terminator has all bits set to zero
 char * virtBM;
 pde_t* pageDir; // ptr to front of pgdir
-
+struct tlb TLB[TLB_ENTRIES];
+pthread_mutex_t lock; 
+int TLB_misess = 0; 
+int TLB_calls = 0;
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -24,13 +27,25 @@ void set_physical_mem() {
 	
 	physBM = (char *)malloc(sizeof(char)*p);
 	virtBM = (char *)malloc(sizeof(char)*v);
-
+	
+//	pthread_mutex_lock(&lock);
 	for(i = 0; i < p; ++i) {
 		physBM[i] = '\0';
 	}
 	for(i = 0; i < v; ++i) {
 		virtBM[i] = '\0';
+	} 
+//intialize the TLB values in the array
+	for(int i = 0; i < TLB_ENTRIES; ++i) {
+				TLB[i].empty = 0;
+				TLB[i].dirIndex = 0;
+				TLB[i].tableIndex = 0;
+				TLB[i].pfn = 0;
 	}
+
+
+
+//	pthread_mutex_unlock(&lock);	
 	pageDir = (pde_t*)(physMem);
 }
 
@@ -41,11 +56,41 @@ void set_physical_mem() {
  */
 int add_TLB(void *va, void *pa)
 {
+ unsigned int pfn = ((unsigned int)pa)  >> 12;
+	
+ 
 
-	/*Part 2 HINT: Add a virtual to physical page translation to the TLB */
+	for(int i = 0; i < TLB_ENTRIES; ++i) {
+		if(TLB[i].empty == 0) {
+				TLB[i].empty = 1;
+				TLB[i].dirIndex = get_top_10_bits(((unsigned int)va));
+				TLB[i].tableIndex = get_mid_10_bits((unsigned int)va);
+				TLB[i].pfn = pfn;
+		}
+	}
 
+	// if all entires are full, selec a random entry to boot from tlb and insert new value 
+	
+	int kick_out =  rand() % 512; 
+	
+				TLB[kick_out].dirIndex = get_top_10_bits((unsigned int)va);
+				TLB[kick_out].tableIndex = get_mid_10_bits((unsigned int)va);
+				TLB[kick_out].pfn = pfn;
+
+
+	//didnt work somehow
 	return -1;
+
+
+/*Part 2 HINT: Add a virtual to physical page translation to the TLB */
+
+
+
+	
 }
+ 
+
+ 	
 
 
 /*
@@ -55,8 +100,29 @@ int add_TLB(void *va, void *pa)
  */
 pte_t *
 check_TLB(void *va) {
+	
 
 	/* Part 2: TLB lookup code here */
+	TLB_calls++;
+
+
+unsigned int addr = (unsigned int )va;
+	unsigned int top = get_top_10_bits(addr);
+	unsigned int mid = get_mid_10_bits(addr);
+	for(int i = 0; i < TLB_ENTRIES; ++i) { 
+		if(TLB[i].dirIndex == top && TLB[i].tableIndex == mid) {
+					return (pte_t *)TLB[i].pfn; // return pfn
+		}
+	} 
+	
+	TLB_misess++; // increment TLB misses
+
+	pte_t * phys_addr = translate((pde_t *)physMem, va); // get the physical addr
+	add_TLB(va, (void *)phys_addr); // add new entry to TLB
+	
+	
+	return NULL;
+
 
 }
 
@@ -68,11 +134,11 @@ check_TLB(void *va) {
 	void
 print_TLB_missrate()
 {
-	double miss_rate = 0;	
+	float miss_rate = 0;	
 
 	/*Part 2 Code here to calculate and print the TLB miss rate*/
 
-
+	miss_rate = ((float)TLB_misess)/((float)TLB_calls);
 
 
 	fprintf(stderr, "TLB miss rate %lf \n", miss_rate);
@@ -92,7 +158,8 @@ pte_t *translate(pde_t *pgdir, void *va) {
 	 * Part 2 HINT: Check the TLB before performing the translation. If
 	 * translation exists, then you can return physical address from the TLB.
 	 */
-	unsigned long addr = (unsigned long)va;
+	pthread_mutex_lock(&lock);
+	unsigned int addr = (unsigned int)va;
 	unsigned long top = get_top_10_bits(addr);
 	unsigned long mid = get_mid_10_bits(addr);
 	unsigned long bot = get_last_12_bits(addr);
@@ -109,7 +176,11 @@ pte_t *translate(pde_t *pgdir, void *va) {
 
 	unsigned long pfn = (unsigned long)(*pg_ptr); 
 
-	return (pte_t *)((pfn  << 12) | bot);
+	pte_t * output = (pte_t *)((pfn  << 12) | bot);
+	 pthread_mutex_unlock(&lock);
+ 	
+	return output;
+//	return (pte_t *)((pfn  << 12) | bot);
 
 	//If translation not successfull
 	///return NULL; 
@@ -146,23 +217,24 @@ void *get_next_avail(int num_pages) {
    and used by the benchmark
  */
 void *a_malloc(unsigned int num_bytes) {
-	// does each malloc call get it's own entire physical page? That would seem pretty dumb but might have enough mem to pull off
-	if(physMem == NULL ){ 
+	
+	if(physMem == NULL ){ // checks if physMem is initalized or not 
+		pthread_mutex_lock(&lock);
+
 			set_physical_mem();
 			
 
 			unsigned int i  = 1; 
-
-			while(i<800){ // find open physical page
+	
+			while(i<800){ // find first availible physical frame
 						if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
-									set_bit_at_index(physBM, i); // set physical page bitmap  
+									set_bit_at_index(physBM, i);
 									break; 
 						}
 						i++; 
-					// initialize physical page 					
 		
 			}
-				
+			
 				unsigned int pfn = i; //the page that we will link the addr too 
 				// assuming page dir starts at front of phy_mem 
 
@@ -171,6 +243,7 @@ void *a_malloc(unsigned int num_bytes) {
 				ptr = physMem + MEMSIZE-1 - PGSIZE; // decrement backwards to create frist physical frame 
 				
 				unsigned long offset = 0; 
+
 				int j = 1;  
 				// find first open slot in first availible page table
 				for(j;j<524288;j++){	
@@ -179,23 +252,29 @@ void *a_malloc(unsigned int num_bytes) {
 							break;
 						}
 					} 
+					
+					
 					// decompose number into array matrix i,j values
 					unsigned int top = floor(j/PGSIZE); 
 					unsigned int mid =  j % PGSIZE; 
 				
-					pde_t * dir_ptr = (pde_t *)physMem; 
+					pde_t * dir_ptr = (pde_t *)physMem; // we point dir_ptr to start of page dir 
 					
-					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);
+					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025); // we then jump 1024+1 entries to the first spot in physical mem after page dir
 					
-					*(page_table_i+mid) = (pte_t)(pfn);
+					*(page_table_i+mid) = (pte_t)(pfn); // we then iterate into this space which is the first page table, and store the pfn here
 				
-					*(dir_ptr+top) = (pde_t)page_table_i;			  // where does new page table begin
-	
+					*(dir_ptr+top) = (pde_t)page_table_i;			  // we then store a ptr to the strat of the page table piece containing the pf number
+					
+					void * output =   (void*)( (((top << 10) | mid) << 12) | offset );
 
-				return (void *)((((top << 10) | mid) << 12) | offset);
+					pthread_mutex_unlock(&lock);
+					return output;
+			//	return (void *)((((top << 10) | mid) << 12) | offset); // we then return the virt addr
 	} 
 	else{ 
 		
+				pthread_mutex_lock(&lock);
 
 			unsigned int i  = 1; 
 
@@ -208,7 +287,7 @@ void *a_malloc(unsigned int num_bytes) {
 					// initialize physical page 					
 		
 			}
-				
+			
 				unsigned int pfn = i; //the page that we will link the addr too 
 
 				char * ptr = physMem; 
@@ -217,12 +296,14 @@ void *a_malloc(unsigned int num_bytes) {
 				unsigned long offset = 0; 
 				int j = 1;  
 				// find first open slot in first availible page table
+
 				for(j;j<524288;j++){	
 						if(get_bit_at_index(virtBM, j) == 0) { 
 								set_bit_at_index(virtBM, j);
 							break;
 						}
 					} 
+	
 					// decompose number into array matrix i,j values
 					unsigned int top = floor(j/PGSIZE); 
 					unsigned int mid =  j % PGSIZE; 
@@ -241,10 +322,12 @@ governed by a page directory entry, we jump in blocks of 2^12 because that is ho
 					*(page_table_i+mid) = (pte_t)(pfn); // store pfn value in the page table entry 
 				
 					*(dir_ptr+top) = (pde_t)page_table_i;			  // store pointer to page_table_i in dir ptr
-	
+					
+					void * output =   (void*)( (((top << 10) | mid) << 12) | offset );
+					pthread_mutex_unlock(&lock);
 
-
-				return (void*)( (((top << 10) | mid) << 12) | offset );
+				return output;
+				//return (void*)( (((top << 10) | mid) << 12) | offset );
 
 
 
@@ -270,15 +353,18 @@ governed by a page directory entry, we jump in blocks of 2^12 because that is ho
 /* Responsible for releasing one or more memory pages using virtual address (va)
  */
 void a_free(void *va, int size) {
-	
+
+	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+		
+	pthread_mutex_lock(&lock);
 	
 	unsigned long addr = (unsigned long)va;
 	unsigned long top = get_top_10_bits(addr);
 	unsigned long mid = get_mid_10_bits(addr);
 	unsigned long bot = get_last_12_bits(addr);
 
-	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
-	
+
+
 	unsigned long pfn =  phys_addr >> 12; 
 
 
@@ -295,10 +381,10 @@ void a_free(void *va, int size) {
 					// initialize physical page 					
 		
 			}
-				
+
 	
 				unsigned long val = top*PGSIZE + mid; // invert i,j to get corresponding value in bitmap
-				
+
 				int j = 1;  
 				// find first open slot in first availible page table
 				for(j;j<524288;j++){	
@@ -309,6 +395,7 @@ void a_free(void *va, int size) {
 					} 
 				
 	
+	pthread_mutex_unlock(&lock);
 
 
 
@@ -335,13 +422,19 @@ void put_value(void *va, void *val, int size) {
 	 * function.
 	 */
 
-	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
-	
+	unsigned int addr = (unsigned int)va;
+	unsigned long top = get_top_10_bits(addr);
+	unsigned long mid = get_mid_10_bits(addr);
+	unsigned long bot = get_last_12_bits(addr);
+
+unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+		pthread_mutex_lock(&lock);
+
 	unsigned long pfn =  phys_addr >> 12; 
 
 
 				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - pfn * PGSIZE; // decrement backwards in crements of pgsize * pfn 
+				ptr = physMem + MEMSIZE-1 - pfn * PGSIZE +bot; // decrement backwards in crements of pgsize * pfn 
 				
 				char * input = (char *)val;
 				if(size < PGSIZE){ 
@@ -350,7 +443,7 @@ void put_value(void *va, void *val, int size) {
 			 
 					memcpy((void *)ptr , val,size); // need to use this function here, and we are allowed to!
 				}
-
+pthread_mutex_unlock(&lock);
 
 }
 
@@ -360,14 +453,27 @@ void get_value(void *va, void *val, int size) {
 
 	/* HINT: put the values pointed to by "va" inside the physical memory at given
 	 * "val" address. Assume you can access "val" directly by derefencing them.
-	 */ 
-	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
-	
-	unsigned long pfn =  phys_addr >> 12; 
+	 */  
+		unsigned int addr = (unsigned int)va;
+	unsigned long top = get_top_10_bits(addr);
+	unsigned long mid = get_mid_10_bits(addr);
+	unsigned long bot = get_last_12_bits(addr);
 
+
+	unsigned long pfn;	
+	pte_t * output = check_TLB(va);
+	
+	if(output != NULL){ 
+		pfn = (unsigned long)output;		
+	} 
+	else{
+	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+//	pthread_mutex_lock(&lock);
+	pfn =  phys_addr >> 12; 
+	}
 
 				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - pfn * PGSIZE; // decrement backwards in crements of pgsize * pfn 
+				ptr = physMem + MEMSIZE-1 - pfn * PGSIZE + bot; // decrement backwards in crements of pgsize * pfn 
 				
 				char * input = (char *)val;
 				if(size < PGSIZE){ 
@@ -376,6 +482,8 @@ void get_value(void *va, void *val, int size) {
 			 
 					memcpy(val,(void *)ptr , size); // need to use this function here, and we are allowed to!
 				}
+		
+	//				pthread_mutex_unlock(&lock);
 }
 
 
@@ -412,10 +520,15 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
 						for(k=0;k<size;k++){
 						address_a = (unsigned int)mat1 + ((i * size * sizeof(int))) + (k * sizeof(int));
             address_b = (unsigned int)mat2 + ((k * size * sizeof(int))) + (j * sizeof(int));
-            get_value((void *)address_a, &y, sizeof(int));
+
+						get_value((void *)address_a, &y, sizeof(int));
             get_value( (void *)address_b, &z, sizeof(int));
-            x+= y*z;
-//						printf("%d ", y*z); 
+						
+						pthread_mutex_lock(&lock);            
+						x+= y*z;
+						pthread_mutex_unlock(&lock);
+
+//				printf("%d ", y*z); 
 						} 
 						put_value((void *)address_c,&x,sizeof(int)); 
 

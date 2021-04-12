@@ -10,7 +10,7 @@ int alloc_size = 5000;
 
 void *alloc_mem(void *id_arg) {
     int id = *((int *)id_arg);
-    pointers[id] = umalloc(alloc_size);
+    pointers[id] = a_malloc(alloc_size); // malloc sutff here
     return NULL;
 }
 
@@ -20,7 +20,7 @@ void *put_mem(void *id_arg) {
     for (int i = 0; i < SIZE; i++) {
         for (int j = 0; j < SIZE; j++) {
             int address_a = (unsigned int)va_pointer + ((i * 5 * sizeof(int))) + (j * sizeof(int));
-            put_val((void *)address_a, &val, sizeof(int));
+            put_value((void *)address_a, &val, sizeof(int)); // put values here
         }
     } 
     return NULL;
@@ -31,24 +31,28 @@ void *mat_mem(void *id_arg) {
     void *a = pointers[i];
     void *b = pointers[i + 1];
     void *c = pointers[i + 2];
-    mat_mult(a, b, SIZE, c);
+    mat_mult(a, b, SIZE, c); // matrix mult here
     return NULL;
 }
 
 void *free_mem(void *id_arg) {
     int id = *((int *)id_arg);
-    ufree(pointers[id], alloc_size);
+    a_free(pointers[id], alloc_size); // free pointers here
 }
 
 int main() {
 
     srand(time(NULL));
-
+		printf("entered \n"); 
+	
+	
     for (int i = 0; i < num_threads; i++)
         ids[i] = i;
 
     for (int i = 0; i < num_threads; i++)
         pthread_create(&threads[i], NULL, alloc_mem, (void *)&ids[i]);
+
+			printf("entered2 \n"); 
 
     for (int i = num_threads; i >= 0; i--)
         pthread_join(threads[i], NULL);
@@ -75,20 +79,22 @@ int main() {
     for (int i = 0; i < SIZE; i++) {
         for (int j = 0; j < SIZE; j++) {
             int address_a = (unsigned int)a + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
-            get_val((void *)address_a, &val, sizeof(int));
+            get_value((void *)address_a, &val, sizeof(int));
             printf("%d ", val);
         }
         printf("\n");
     }
 
-    printf("Performing matrix multiplications in multiple threads threads!\n");
+ /*
+ printf("Performing matrix multiplications in multiple threads threads!\n");
 
     for (int i = 0; i < num_threads; i+=3)
         pthread_create(&threads[i], NULL, mat_mem, (void *)&ids[i]);
     for (int i = 0; i < num_threads; i+=3)
         pthread_join(threads[i], NULL);
+*/
 
-    printf("Randomly checking a thread allocation to see if everything worked correctly!\n");
+printf("Randomly checking a thread allocation to see if everything worked correctly!\n");
 
     rand_id = (((rand() % (num_threads/3)) + 1) * 3) - 1;
     a = pointers[rand_id];
@@ -96,7 +102,7 @@ int main() {
     for (int i = 0; i < SIZE; i++) {
         for (int j = 0; j < SIZE; j++) {
             int address_a = (unsigned int)a + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
-            get_val((void *)address_a, &val, sizeof(int));
+            get_value((void *)address_a, &val, sizeof(int));
             printf("%d ", val);
         }
         printf("\n");
@@ -116,7 +122,7 @@ int main() {
     int flag = 0;
 
     while (temp != NULL) {
-        temp = umalloc(10);
+        temp = a_malloc(10);
         if ((int)temp == old) {
             printf("Free Worked!\n");
             flag = 1;

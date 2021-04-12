@@ -14,7 +14,7 @@ int main() {
     int old_a = (int)a;
     void *b = a_malloc(ARRAY_SIZE);
     void *c = a_malloc(ARRAY_SIZE);
-    int x = 2;
+    int x = 1;
     int y, z;
     int i =0, j=0;
     int address_a = 0, address_b = 0;
@@ -24,8 +24,10 @@ int main() {
 
     printf("Storing integers to generate a SIZExSIZE matrix\n");
     for (i = 0; i < SIZE; i++) {
-        for (j = 0; j < SIZE; j++) {
-            address_a = (unsigned int)a + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
+       				for (j = 0; j < SIZE; j++) {         
+						 x++;
+
+						address_a = (unsigned int)a + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
             address_b = (unsigned int)b + ((i * SIZE * sizeof(int))) + (j * sizeof(int));
             put_value((void *)address_a, &x, sizeof(int));
             put_value((void *)address_b, &x, sizeof(int));
@@ -57,10 +59,14 @@ int main() {
         }
         printf("\n");
     }
-    printf("Freeing the allocations!\n");
+    
+
+		printf("Freeing the allocations!\n");
     a_free(a, ARRAY_SIZE);
     a_free(b, ARRAY_SIZE);
     a_free(c, ARRAY_SIZE);
+
+		print_TLB_missrate();
 
     printf("Checking if allocations were freed!\n");
     a = a_malloc(ARRAY_SIZE);
