@@ -5,11 +5,7 @@ char* physMem = NULL;
 char * physBM; // null terminator has all bits set to zero
 char * virtBM;
 pde_t* pageDir; // ptr to front of pgdir
-
-
-
-
-
+struct tlb TLB[TLB_ENTRIES];
 
 /*
 Function responsible for allocating and setting your physical memory 
@@ -153,8 +149,13 @@ void *get_next_avail(int num_pages) {
 void *a_malloc(unsigned int num_bytes) {
 	// does each malloc call get it's own entire physical page? That would seem pretty dumb but might have enough mem to pull off
 	if(physMem == NULL ){ 
-			set_physical_mem();
+			//initiallize tlb
+			for(int i = 0; i < TLB_ENTRIES; ++i) {
+				TLB[i].valid = 0;	
+			}	
 			
+			//initialize physical memory
+			set_physical_mem();
 
 			unsigned int i  = 1; 
 
@@ -197,67 +198,74 @@ void *a_malloc(unsigned int num_bytes) {
 					*(dir_ptr+top) = (pde_t)page_table_i;			  // where does new page table begin
 	
 
-				return (void *)((((top << 10) | mid) << 12) | offset);
+					//store this mapping in the tlb
+					TLB[0].valid = 1;
+					TLB[0].dirIndex = top;
+					TLB[0].tableIndex = mid;
+					TLB[0].pfn = 1;
+
+					return (void *)((((top << 10) | mid) << 12) | offset);
 	} 
 	else{ 
-		
 
-			unsigned int i  = 1; 
 
-			while(i<800){ // find open physical page
-						if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
-									set_bit_at_index(physBM, i); // set physical page bitmap  
-									break; 
-						}
-						i++; 
-					// initialize physical page 					
-		
+		unsigned int i  = 1; 
+
+		while(i<800){ // find open physical page
+			if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
+				set_bit_at_index(physBM, i); // set physical page bitmap  
+				break; 
 			}
-				
-				unsigned int pfn = i; //the page that we will link the addr too 
+			i++; 
+			// initialize physical page 					
 
-				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - i*4096;  // decrement backwards to next open physical frame 
-				
-				unsigned long offset = 0; 
-				int j = 1;  
-				// find first open slot in first availible page table
-				for(j;j<524288;j++){	
-						if(get_bit_at_index(virtBM, j) == 0) { 
-								set_bit_at_index(virtBM, j);
-							break;
-						}
-					} 
-					// decompose number into array matrix i,j values
-					unsigned int top = floor(j/4096); 
-					unsigned int mid =  j % 4096; 
-					
-					pde_t * dir_ptr = (pde_t *)physMem; 
-					
-					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);// increments to where first page table starts
+		}
 
-/* 
-top represents the rows we need to jump, where each row represents some porition of the page table 
-governed by a page directory entry, we jump in blocks of 2^12 because that is how many enties we can fit per page
+		unsigned int pfn = i; //the page that we will link the addr too 
 
-*/
-					page_table_i += 4096*top; 
-					
-					*(page_table_i+mid) = (pte_t)(pfn); // store pfn value in the page table entry 
-				
-					*(dir_ptr+top) = (pde_t)page_table_i;			  // store pointer to page_table_i in dir ptr
-	
+		char * ptr = physMem; 
+		ptr = physMem + MEMSIZE-1 - i*4096;  // decrement backwards to next open physical frame 
+
+		unsigned long offset = 0; 
+		int j = 1;  
+		// find first open slot in first availible page table
+		for(j;j<524288;j++){	
+			if(get_bit_at_index(virtBM, j) == 0) { 
+				set_bit_at_index(virtBM, j);
+				break;
+			}
+		} 
+		// decompose number into array matrix i,j values
+		unsigned int top = floor(j/4096); 
+		unsigned int mid =  j % 4096; 
+
+		pde_t * dir_ptr = (pde_t *)physMem; 
+
+		pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);// increments to where first page table starts
+
+		/* 
+		   top represents the rows we need to jump, where each row represents some porition of the page table 
+		   governed by a page directory entry, we jump in blocks of 2^12 because that is how many enties we can fit per page
+
+		 */
+		page_table_i += 4096*top; 
+
+		*(page_table_i+mid) = (pte_t)(pfn); // store pfn value in the page table entry 
+
+		*(dir_ptr+top) = (pde_t)page_table_i;			  // store pointer to page_table_i in dir ptr
 
 
-				return (void*)( (((top << 10) | mid) << 12) | offset );
+		
+
+		return (void*)( (((top << 10) | mid) << 12) | offset );
 
 
 
 
 
 	}
-	
-	
+
+
 	/* 
 	 * HINT: If the physical memory is not yet initialized, then allocate and initialize.
 	 */
@@ -269,51 +277,51 @@ governed by a page directory entry, we jump in blocks of 2^12 because that is ho
 	 * have to mark which physical pages are used. 
 	 */
 
-//	return NULL;
+	//	return NULL;
 }
 
 /* Responsible for releasing one or more memory pages using virtual address (va)
  */
 void a_free(void *va, int size) {
-	
-	
+
+
 	unsigned long addr = (unsigned long)va;
 	unsigned long top = get_top_10_bits(addr);
 	unsigned long mid = get_mid_10_bits(addr);
 	unsigned long bot = get_last_12_bits(addr);
 
 	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
-	
+
 	unsigned long pfn =  phys_addr >> 12; 
 
 
 
-// just loop through bitmaps and make sure the assocaited values at the indicies are set back to 0
-			 int i  = 1; 
+	// just loop through bitmaps and make sure the assocaited values at the indicies are set back to 0
+	int i  = 1; 
 
-			while(i<800){ // find open physical page
-						if(i == pfn ){
-									set_free_bit_at_index(physBM, i); // set physical page bitmap  
-									break; 
-						}
-						i++; 
-					// initialize physical page 					
-		
-			}
-				
-	
-				unsigned long val = top*4096 + mid; // invert i,j to get corresponding value in bitmap
-				
-				int j = 1;  
-				// find first open slot in first availible page table
-				for(j;j<524288;j++){	
-						if(j == val ) { 
-								set_free_bit_at_index(virtBM, j);
-							break;
-						}
-					} 
-				
-	
+	while(i<800){ // find open physical page
+		if(i == pfn ){
+			set_free_bit_at_index(physBM, i); // set physical page bitmap  
+			break; 
+		}
+		i++; 
+		// initialize physical page 					
+
+	}
+
+
+	unsigned long val = top*4096 + mid; // invert i,j to get corresponding value in bitmap
+
+	int j = 1;  
+	// find first open slot in first availible page table
+	for(j;j<524288;j++){	
+		if(j == val ) { 
+			set_free_bit_at_index(virtBM, j);
+			break;
+		}
+	} 
+
+
 
 
 
@@ -341,20 +349,20 @@ void put_value(void *va, void *val, int size) {
 	 */
 
 	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
-	
+
 	unsigned long pfn =  phys_addr >> 12; 
 
 
-				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
-				
-				char * input = (char *)val;
-				if(size < PGSIZE){ 
-				 
-				 	int i =0; 
-			 
-					memcpy((void *)ptr , val,size); // need to use this function here, and we are allowed to!
-				}
+	char * ptr = physMem; 
+	ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
+
+	char * input = (char *)val;
+	if(size < PGSIZE){ 
+
+		int i =0; 
+
+		memcpy((void *)ptr , val,size); // need to use this function here, and we are allowed to!
+	}
 
 
 }
@@ -367,20 +375,20 @@ void get_value(void *va, void *val, int size) {
 	 * "val" address. Assume you can access "val" directly by derefencing them.
 	 */ 
 	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
-	
+
 	unsigned long pfn =  phys_addr >> 12; 
 
 
-				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
-				
-				char * input = (char *)val;
-				if(size < PGSIZE){ 
-				 
-				 	int i =0; 
-			 
-					memcpy(val,(void *)ptr , size); // need to use this function here, and we are allowed to!
-				}
+	char * ptr = physMem; 
+	ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
+
+	char * input = (char *)val;
+	if(size < PGSIZE){ 
+
+		int i =0; 
+
+		memcpy(val,(void *)ptr , size); // need to use this function here, and we are allowed to!
+	}
 }
 
 
@@ -403,26 +411,26 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
 }
 
 static unsigned int get_top_10_bits(unsigned int value){   
-    return (value >> 22);
+	return (value >> 22);
 }
 
 static unsigned int get_mid_10_bits(unsigned int value){
-   unsigned int mid_bits_value = 0;   
-   value =    value >> 12; 
-   unsigned int outer_bits_mask =   (1 << 10);  
-   outer_bits_mask = outer_bits_mask-1;
-   mid_bits_value =  value &  outer_bits_mask;
-   return mid_bits_value;
+	unsigned int mid_bits_value = 0;   
+	value =    value >> 12; 
+	unsigned int outer_bits_mask =   (1 << 10);  
+	outer_bits_mask = outer_bits_mask-1;
+	mid_bits_value =  value &  outer_bits_mask;
+	return mid_bits_value;
 
 }
 
 static unsigned int get_last_12_bits(unsigned int value){
-   unsigned int mid_bits_value = 0;
-   value = value >> 0;
-   unsigned int outer_bits_mask =  (1 << 12);
-   outer_bits_mask = outer_bits_mask-1;
-   mid_bits_value =  value &  outer_bits_mask;
-   return mid_bits_value;
+	unsigned int mid_bits_value = 0;
+	value = value >> 0;
+	unsigned int outer_bits_mask =  (1 << 12);
+	outer_bits_mask = outer_bits_mask-1;
+	mid_bits_value =  value &  outer_bits_mask;
+	return mid_bits_value;
 
 } 
 
@@ -431,51 +439,51 @@ static unsigned int get_last_12_bits(unsigned int value){
 // bitmap is a region where were store bitmap 
 static void set_bit_at_index(char *bitmap, int index)
 {
-    // We first find the location in the bitmap array where we want to set a bit
-    // Because each character can store 8 bits, using the "index", we find which 
-    // location in the character array should we set the bit to.
-    char *region = ((char *) bitmap) + (index / 8);
-    
-    // Now, we cannot just write one bit, but we can only write one character. 
-    // So, when we set the bit, we should not distrub other bits. 
-    // So, we create a mask and OR with existing values
-    char bit = 1 << (index % 8);
+	// We first find the location in the bitmap array where we want to set a bit
+	// Because each character can store 8 bits, using the "index", we find which 
+	// location in the character array should we set the bit to.
+	char *region = ((char *) bitmap) + (index / 8);
 
-    // just set the bit to 1. NOTE: If we want to free a bit (*bitmap_region &= ~bit;)
-    *region |= bit;
-   
-    return;
+	// Now, we cannot just write one bit, but we can only write one character. 
+	// So, when we set the bit, we should not distrub other bits. 
+	// So, we create a mask and OR with existing values
+	char bit = 1 << (index % 8);
+
+	// just set the bit to 1. NOTE: If we want to free a bit (*bitmap_region &= ~bit;)
+	*region |= bit;
+
+	return;
 }
 
 static void set_free_bit_at_index(char *bitmap, int index)
 {
-    // We first find the location in the bitmap array where we want to set a bit
-    // Because each character can store 8 bits, using the "index", we find which 
-    // location in the character array should we set the bit to.
-    char *region = ((char *) bitmap) + (index / 8);
-    
-    // Now, we cannot just write one bit, but we can only write one character. 
-    // So, when we set the bit, we should not distrub other bits. 
-    // So, we create a mask and OR with existing values
-    char bit = 1 << (index % 8);
+	// We first find the location in the bitmap array where we want to set a bit
+	// Because each character can store 8 bits, using the "index", we find which 
+	// location in the character array should we set the bit to.
+	char *region = ((char *) bitmap) + (index / 8);
 
-    // just set the bit to 1. NOTE: If we want to free a bit (*bitmap_region &= ~bit;)
-    *region &= ~bit;
-   
-    return;
+	// Now, we cannot just write one bit, but we can only write one character. 
+	// So, when we set the bit, we should not distrub other bits. 
+	// So, we create a mask and OR with existing values
+	char bit = 1 << (index % 8);
+
+	// just set the bit to 1. NOTE: If we want to free a bit (*bitmap_region &= ~bit;)
+	*region &= ~bit;
+
+	return;
 }
 
 
 //Function to get a bit at "index"
 static int get_bit_at_index(char *bitmap, int index)
 {
-    //Same as example 3, get to the location in the character bitmap array
-    char *region = ((char *) bitmap) + (index / 8);
-    
-    //Create a value mask that we are going to check if bit is set or not
-    char bit = 1 << (index % 8);
-    
-    return (int)(*region >> (index % 8)) & 0x1;
+	//Same as example 3, get to the location in the character bitmap array
+	char *region = ((char *) bitmap) + (index / 8);
+
+	//Create a value mask that we are going to check if bit is set or not
+	char bit = 1 << (index % 8);
+
+	return (int)(*region >> (index % 8)) & 0x1;
 }
 
 
@@ -483,54 +491,54 @@ static int get_bit_at_index(char *bitmap, int index)
 
 /*int main() {
 
-	int b = 27;
-	int * ptr; 
-	ptr = &b; 
+  int b = 27;
+  int * ptr; 
+  ptr = &b; 
 
-	int a = 28;
-	int * ptr2; 
-	ptr2 = &a; 
+  int a = 28;
+  int * ptr2; 
+  ptr2 = &a; 
 
-	int c = 29;
-	int * ptr3; 
-	ptr3 = &c; 
+  int c = 29;
+  int * ptr3; 
+  ptr3 = &c; 
 
 
-	void * output = a_malloc(4);  
-	
-	put_value(output, (void *)ptr, sizeof(int *)); 
-	
-	int * ret =  (int *)malloc(sizeof(int)); 
+  void * output = a_malloc(4);  
 
-	get_value(output,(void *)ret, sizeof(int *)); 
-	
-	printf("%d \n",*ret);
-	
+  put_value(output, (void *)ptr, sizeof(int *)); 
+
+  int * ret =  (int *)malloc(sizeof(int)); 
+
+  get_value(output,(void *)ret, sizeof(int *)); 
+
+  printf("%d \n",*ret);
+
 //	a_free(output, sizeof(int *)); 
 
-	void * output2 =  a_malloc(4); 
+void * output2 =  a_malloc(4); 
 
 
-	put_value(output2, (void *)ptr2, sizeof(int *)); 
+put_value(output2, (void *)ptr2, sizeof(int *)); 
 
-	int * ret1 = (int *)malloc(sizeof(int)); // make sure that we malloc space, for what we need to store otherwise undefined behavior :( 
+int * ret1 = (int *)malloc(sizeof(int)); // make sure that we malloc space, for what we need to store otherwise undefined behavior :( 
 
-	get_value(output2, (void *)ret1, sizeof(int *)); 
-	
-	printf("%d \n",*ret1);
+get_value(output2, (void *)ret1, sizeof(int *)); 
 
-
-	void * output3  =  a_malloc(4);
-	
-	put_value(output3, (void *)ptr3, sizeof(int *)); 
-	
-		int * ret2 = (int *)malloc(sizeof(int)); 
-
-	get_value(output3, (void *)ret2, sizeof(int *)); 
-	
-	printf("%d \n",*ret2); 
+printf("%d \n",*ret1);
 
 
+void * output3  =  a_malloc(4);
 
-	return 1;
+put_value(output3, (void *)ptr3, sizeof(int *)); 
+
+int * ret2 = (int *)malloc(sizeof(int)); 
+
+get_value(output3, (void *)ret2, sizeof(int *)); 
+
+printf("%d \n",*ret2); 
+
+
+
+return 1;
 }*/
