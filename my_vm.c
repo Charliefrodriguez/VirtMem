@@ -40,11 +40,48 @@ void set_physical_mem() {
  * Part 2: Add a virtual to physical page translation to the TLB.
  * Feel free to extend the function arguments or return type.
  */
-int add_TLB(void *va, void *pa)
-{
+int add_TLB(void *va, void *pa){
+	
+	unsigned int pfn = *((unsigned int*)pa)  >> 12;
+	int count = 0;
+	
+	//loop over all enteries and find the last entry to be inserted, the entry followin the last entry was first in, so replace it
+	for(int i = 0; i < TLB_ENTRIES; ++i) {
+		if(TLB[i].lastIn == 1) {
+			if(i+1 == TLB_ENTRIES) {
+				TLB[i].lastIn = 0;
+				TLB[0].empty = 0;
+				TLB[0].lastIn = 1;
+				TLB[0].dirIndex = get_top_10_bits(*((unsigned int*)va));
+				TLB[0].tableIndex = get_mid_10_bits(*((unsigned int*)va));
+				TLB[0].pfn = pfn;
+				return 1;
+			}else {
+				TLB[i+1].empty = 0;
+				TLB[i+1].lastIn = 1;
+				TLB[i+1].dirIndex = get_top_10_bits(*((unsigned int*)va));
+				TLB[i+1].tableIndex = get_mid_10_bits(*((unsigned int*)va));
+				TLB[i+1].pfn = pfn;
+				return 1;
+			}
+		}
+		if(TLB[i].empty == 1) {
+			++count;
+		}
+	}
 
-	/*Part 2 HINT: Add a virtual to physical page translation to the TLB */
+	//all entries are empty, so its the first entry to be added
+	if(count == TLB_ENTRIES) {
+		TLB[0].empty = 0;
+		TLB[0].lastIn = 1;
+		TLB[0].dirIndex = get_top_10_bits(*((unsigned int*)va));
+		TLB[0].tableIndex = get_mid_10_bits(*((unsigned int*)va));
+		TLB[0].pfn = pfn;
+		return 1;
 
+	}
+
+	//didnt work somehow
 	return -1;
 }
 
@@ -54,11 +91,20 @@ int add_TLB(void *va, void *pa)
  * Returns the physical page address.
  * Feel free to extend this function and change the return type.
  */
-pte_t *
-check_TLB(void *va) {
-
-	/* Part 2: TLB lookup code here */
-
+pte_t* check_TLB(void *va) {
+	unsigned int addr = *((unsigned int*)va);
+	unsigned int top = get_top_10_bits(addr);
+	unsigned int mid = get_mid_10_bits(addr);
+	for(int i = 0; i < TLB_ENTRIES; ++i) { 
+		if(TLB[i].dirIndex == top && TLB[i].tableIndex == mid) {
+			pde_t * dir_ptr = pageDir; 
+			dir_ptr += top;  
+			pte_t * pg_ptr = (pte_t *)(*dir_ptr);  
+			pg_ptr += mid; 
+			return pg_ptr;
+		}
+	}
+	return NULL;
 }
 
 
@@ -97,7 +143,7 @@ pte_t *translate(pde_t *pgdir, void *va) {
 	unsigned long top = get_top_10_bits(addr);
 	unsigned long mid = get_mid_10_bits(addr);
 	unsigned long bot = get_last_12_bits(addr);
-	
+
 
 	pde_t * dir_ptr = pgdir; 
 
@@ -149,62 +195,57 @@ void *get_next_avail(int num_pages) {
 void *a_malloc(unsigned int num_bytes) {
 	// does each malloc call get it's own entire physical page? That would seem pretty dumb but might have enough mem to pull off
 	if(physMem == NULL ){ 
-			//initiallize tlb
-			for(int i = 0; i < TLB_ENTRIES; ++i) {
-				TLB[i].valid = 0;	
-			}	
-			
-			//initialize physical memory
-			set_physical_mem();
+		//initiallize tlb
+		for(int i = 0; i < TLB_ENTRIES; ++i) {
+			TLB[i].empty = 1;
+			TLB[i].lastIn= 0;	
+		}	
 
-			unsigned int i  = 1; 
+		//initialize physical memory
+		set_physical_mem();
 
-			while(i<800){ // find open physical page
-						if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
-									set_bit_at_index(physBM, i); // set physical page bitmap  
-									break; 
-						}
-						i++; 
-					// initialize physical page 					
-		
+		unsigned int i  = 1; 
+
+		while(i<800){ // find open physical page
+			if( (i+1) % 8 != 0 && get_bit_at_index(physBM , i) == 0 ){
+				set_bit_at_index(physBM, i); // set physical page bitmap  
+				break; 
 			}
-				
-				unsigned int pfn = i; //the page that we will link the addr too 
-				// assuming page dir starts at front of phy_mem 
+			i++; 
+			// initialize physical page 					
 
-	
-				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - 4096; // decrement backwards to create frist physical frame 
-				
-				unsigned long offset = 0; 
-				int j = 1;  
-				// find first open slot in first availible page table
-				for(j;j<524288;j++){	
-						if(get_bit_at_index(virtBM, j) == 0) { 
-								set_bit_at_index(virtBM, j);
-							break;
-						}
-					} 
-					// decompose number into array matrix i,j values
-					unsigned int top = floor(j/4096); 
-					unsigned int mid =  j % 4096; 
-				
-					pde_t * dir_ptr = (pde_t *)physMem; 
-					
-					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);
-					
-					*(page_table_i+mid) = (pte_t)(pfn);
-				
-					*(dir_ptr+top) = (pde_t)page_table_i;			  // where does new page table begin
-	
+		}
 
-					//store this mapping in the tlb
-					TLB[0].valid = 1;
-					TLB[0].dirIndex = top;
-					TLB[0].tableIndex = mid;
-					TLB[0].pfn = 1;
+		unsigned int pfn = i; //the page that we will link the addr too 
+		// assuming page dir starts at front of phy_mem 
 
-					return (void *)((((top << 10) | mid) << 12) | offset);
+
+		char * ptr = physMem; 
+		ptr = physMem + MEMSIZE-1 - 4096; // decrement backwards to create frist physical frame 
+
+		unsigned long offset = 0; 
+		int j = 1;  
+		// find first open slot in first availible page table
+		for(j;j<524288;j++){	
+			if(get_bit_at_index(virtBM, j) == 0) { 
+				set_bit_at_index(virtBM, j);
+				break;
+			}
+		} 
+		// decompose number into array matrix i,j values
+		unsigned int top = floor(j/4096); 
+		unsigned int mid =  j % 4096; 
+
+		pde_t * dir_ptr = (pde_t *)physMem; 
+
+		pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);
+
+		*(page_table_i+mid) = (pte_t)(pfn);
+
+		*(dir_ptr+top) = (pde_t)page_table_i;			  // where does new page table begin
+
+
+		return (void *)((((top << 10) | mid) << 12) | offset);
 	} 
 	else{ 
 
@@ -253,16 +294,6 @@ void *a_malloc(unsigned int num_bytes) {
 		*(page_table_i+mid) = (pte_t)(pfn); // store pfn value in the page table entry 
 
 		*(dir_ptr+top) = (pde_t)page_table_i;			  // store pointer to page_table_i in dir ptr
-
-
-		
-
-		return (void*)( (((top << 10) | mid) << 12) | offset );
-
-
-
-
-
 	}
 
 
@@ -352,7 +383,6 @@ void put_value(void *va, void *val, int size) {
 
 	unsigned long pfn =  phys_addr >> 12; 
 
-
 	char * ptr = physMem; 
 	ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
 
@@ -374,11 +404,15 @@ void get_value(void *va, void *val, int size) {
 	/* HINT: put the values pointed to by "va" inside the physical memory at given
 	 * "val" address. Assume you can access "val" directly by derefencing them.
 	 */ 
-	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+	unsigned long pfn;
 
-	unsigned long pfn =  phys_addr >> 12; 
+	//if no tlb entry, do translation, then add to tlb
+	if(pfn = check_TLB(va) == NULL) {
+		unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+		pfn =  phys_addr >> 12; 
+	}
 
-
+	//pfn will be set whether in tlb or not, so now we can use it to get the value
 	char * ptr = physMem; 
 	ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
 

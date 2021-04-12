@@ -32,7 +32,8 @@ struct tlb {
     * Think about the size of each TLB entry that performs virtual to physical
     * address translation.
     */
-    int valid;
+    int empty;
+    int lastIn;
     unsigned int pfn;
     unsigned int dirIndex;
     unsigned int tableIndex;
