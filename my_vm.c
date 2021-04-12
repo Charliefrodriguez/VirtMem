@@ -411,6 +411,7 @@ void get_value(void *va, void *val, int size) {
 	if(pfn = check_TLB(&va) == NULL) {
 		unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
 		pfn =  phys_addr >> 12; 
+		//add to tlb
 	}
 
 	//pfn will be set whether in tlb or not, so now we can use it to get the value
@@ -520,7 +521,6 @@ static int get_bit_at_index(char *bitmap, int index)
 
 	return (int)(*region >> (index % 8)) & 0x1;
 }
-
 
 
 
