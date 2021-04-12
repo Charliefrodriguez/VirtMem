@@ -376,12 +376,6 @@ void get_value(void *va, void *val, int size) {
 			 
 					memcpy(val,(void *)ptr , size); // need to use this function here, and we are allowed to!
 				}
-
-
-
-
-
-
 }
 
 
