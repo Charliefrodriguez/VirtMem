@@ -270,6 +270,48 @@ governed by a page directory entry, we jump in blocks of 2^12 because that is ho
 /* Responsible for releasing one or more memory pages using virtual address (va)
  */
 void a_free(void *va, int size) {
+	
+	
+	unsigned long addr = (unsigned long)va;
+	unsigned long top = get_top_10_bits(addr);
+	unsigned long mid = get_mid_10_bits(addr);
+	unsigned long bot = get_last_12_bits(addr);
+
+	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
+	
+	unsigned long pfn =  phys_addr >> 12; 
+
+
+
+// just loop through bitmaps and make sure the assocaited values at the indicies are set back to 0
+			 int i  = 1; 
+
+			while(i<800){ // find open physical page
+						if(i == pfn ){
+									set_free_bit_at_index(physBM, i); // set physical page bitmap  
+									break; 
+						}
+						i++; 
+					// initialize physical page 					
+		
+			}
+				
+	
+				unsigned long val = top*4096 + mid; // invert i,j to get corresponding value in bitmap
+				
+				int j = 1;  
+				// find first open slot in first availible page table
+				for(j;j<524288;j++){	
+						if(j == val ) { 
+								set_free_bit_at_index(virtBM, j);
+							break;
+						}
+					} 
+				
+	
+
+
+
 
 	/* Part 1: Free the page table entries starting from this virtual address
 	 * (va). Also mark the pages free in the bitmap. Perform free only if the 
@@ -423,6 +465,24 @@ static void set_bit_at_index(char *bitmap, int index)
     return;
 }
 
+static void set_free_bit_at_index(char *bitmap, int index)
+{
+    // We first find the location in the bitmap array where we want to set a bit
+    // Because each character can store 8 bits, using the "index", we find which 
+    // location in the character array should we set the bit to.
+    char *region = ((char *) bitmap) + (index / 8);
+    
+    // Now, we cannot just write one bit, but we can only write one character. 
+    // So, when we set the bit, we should not distrub other bits. 
+    // So, we create a mask and OR with existing values
+    char bit = 1 << (index % 8);
+
+    // just set the bit to 1. NOTE: If we want to free a bit (*bitmap_region &= ~bit;)
+    *region &= ~bit;
+   
+    return;
+}
+
 
 //Function to get a bit at "index"
 static int get_bit_at_index(char *bitmap, int index)
@@ -440,7 +500,7 @@ static int get_bit_at_index(char *bitmap, int index)
 
 
 int main() {
-/*
+
 	int b = 27;
 	int * ptr; 
 	ptr = &b; 
@@ -463,6 +523,8 @@ int main() {
 	get_value(output,(void *)ret, sizeof(int *)); 
 	
 	printf("%d \n",*ret);
+	
+//	a_free(output, sizeof(int *)); 
 
 	void * output2 =  a_malloc(4); 
 
@@ -484,12 +546,8 @@ int main() {
 
 	get_value(output3, (void *)ret2, sizeof(int *)); 
 	
-	printf("%d \n",*ret2);
-*/ 
+	printf("%d \n",*ret2); 
 
-void * output = a_malloc(12); 
-int arr[3] = {0,1,2};
-put_value(output, (void*)arr,sizeof(int *)); 
 
 
 	return 1;
