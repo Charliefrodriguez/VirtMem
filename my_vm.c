@@ -168,7 +168,7 @@ void *a_malloc(unsigned int num_bytes) {
 
 	
 				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - 4096; // decrement backwards to create frist physical frame 
+				ptr = physMem + MEMSIZE-1 - PGSIZE; // decrement backwards to create frist physical frame 
 				
 				unsigned long offset = 0; 
 				int j = 1;  
@@ -180,8 +180,8 @@ void *a_malloc(unsigned int num_bytes) {
 						}
 					} 
 					// decompose number into array matrix i,j values
-					unsigned int top = floor(j/4096); 
-					unsigned int mid =  j % 4096; 
+					unsigned int top = floor(j/PGSIZE); 
+					unsigned int mid =  j % PGSIZE; 
 				
 					pde_t * dir_ptr = (pde_t *)physMem; 
 					
@@ -212,7 +212,7 @@ void *a_malloc(unsigned int num_bytes) {
 				unsigned int pfn = i; //the page that we will link the addr too 
 
 				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - i*4096;  // decrement backwards to next open physical frame 
+				ptr = physMem + MEMSIZE-1 - i*PGSIZE;  // decrement backwards to next open physical frame 
 				
 				unsigned long offset = 0; 
 				int j = 1;  
@@ -224,8 +224,8 @@ void *a_malloc(unsigned int num_bytes) {
 						}
 					} 
 					// decompose number into array matrix i,j values
-					unsigned int top = floor(j/4096); 
-					unsigned int mid =  j % 4096; 
+					unsigned int top = floor(j/PGSIZE); 
+					unsigned int mid =  j % PGSIZE; 
 					
 					pde_t * dir_ptr = (pde_t *)physMem; 
 					
@@ -236,7 +236,7 @@ top represents the rows we need to jump, where each row represents some porition
 governed by a page directory entry, we jump in blocks of 2^12 because that is how many enties we can fit per page
 
 */
-					page_table_i += 4096*top; 
+					page_table_i += PGSIZE*top; 
 					
 					*(page_table_i+mid) = (pte_t)(pfn); // store pfn value in the page table entry 
 				
@@ -297,7 +297,7 @@ void a_free(void *va, int size) {
 			}
 				
 	
-				unsigned long val = top*4096 + mid; // invert i,j to get corresponding value in bitmap
+				unsigned long val = top*PGSIZE + mid; // invert i,j to get corresponding value in bitmap
 				
 				int j = 1;  
 				// find first open slot in first availible page table
@@ -341,7 +341,7 @@ void put_value(void *va, void *val, int size) {
 
 
 				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
+				ptr = physMem + MEMSIZE-1 - pfn * PGSIZE; // decrement backwards in crements of pgsize * pfn 
 				
 				char * input = (char *)val;
 				if(size < PGSIZE){ 
@@ -367,7 +367,7 @@ void get_value(void *va, void *val, int size) {
 
 
 				char * ptr = physMem; 
-				ptr = physMem + MEMSIZE-1 - pfn * 4096; // decrement backwards in crements of pgsize * pfn 
+				ptr = physMem + MEMSIZE-1 - pfn * PGSIZE; // decrement backwards in crements of pgsize * pfn 
 				
 				char * input = (char *)val;
 				if(size < PGSIZE){ 
@@ -392,7 +392,38 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
 	 * load each element and perform multiplication. Take a look at test.c! In addition to 
 	 * getting the values from two matrices, you will perform multiplication and 
 	 * store the result to the "answer array"
-	 */
+	 */ 
+//	int ans_indx = 0;
+	int matrix_1 = 0; 
+	int matrix_2 = 0;
+	//int i,j,k; 
+		//int x = 1;
+    int y, z;
+    int i =0, j=0,k=0;
+    int address_a = 0, address_b = 0;
+    int address_c = 0;
+    //printf("Fetching matrix elements stored in the arrays\n");
+
+    for (i = 0; i < size; i++) {
+        for (j = 0; j < size; j++) {
+            int x  = 0;
+						address_c = (unsigned int)answer + ((i * size * sizeof(int))) + (j * sizeof(int)); 
+											
+						for(k=0;k<size;k++){
+						address_a = (unsigned int)mat1 + ((i * size * sizeof(int))) + (k * sizeof(int));
+            address_b = (unsigned int)mat2 + ((k * size * sizeof(int))) + (j * sizeof(int));
+            get_value((void *)address_a, &y, sizeof(int));
+            get_value( (void *)address_b, &z, sizeof(int));
+            x+= y*z;
+//						printf("%d ", y*z); 
+						} 
+						put_value((void *)address_c,&x,sizeof(int)); 
+
+					        }
+  //      printf("\n");
+    } 
+
+
 
 
 }
@@ -475,7 +506,7 @@ static int get_bit_at_index(char *bitmap, int index)
 
 
 
-
+/*
 int main() {
 
 	int b = 27;
@@ -528,4 +559,4 @@ int main() {
 
 
 	return 1;
-}
+}*/
