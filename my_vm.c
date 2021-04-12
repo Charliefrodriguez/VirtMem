@@ -6,6 +6,11 @@ char * physBM; // null terminator has all bits set to zero
 char * virtBM;
 pde_t* pageDir; // ptr to front of pgdir
 
+
+
+
+
+
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -476,7 +481,7 @@ static int get_bit_at_index(char *bitmap, int index)
 
 
 
-int main() {
+/*int main() {
 
 	int b = 27;
 	int * ptr; 
@@ -528,4 +533,4 @@ int main() {
 
 
 	return 1;
-}
+}*/
