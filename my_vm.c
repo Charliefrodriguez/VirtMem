@@ -1,6 +1,7 @@
 #include "my_vm.h"
 #include<math.h>
 #include<string.h>
+
 char* physMem = NULL;
 char * physBM; // null terminator has all bits set to zero
 char * virtBM;
@@ -407,7 +408,7 @@ void get_value(void *va, void *val, int size) {
 	unsigned long pfn;
 
 	//if no tlb entry, do translation, then add to tlb
-	if(pfn = check_TLB(va) == NULL) {
+	if(pfn = check_TLB(&va) == NULL) {
 		unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
 		pfn =  phys_addr >> 12; 
 	}
@@ -523,7 +524,7 @@ static int get_bit_at_index(char *bitmap, int index)
 
 
 
-/*int main() {
+int main() {
 
   int b = 27;
   int * ptr; 
@@ -575,4 +576,4 @@ printf("%d \n",*ret2);
 
 
 return 1;
-}*/
+}
