@@ -53,5 +53,6 @@ static unsigned int get_mid_10_bits(unsigned int value);
 static unsigned int get_last_12_bits(unsigned int value);
 static void set_bit_at_index(char *bitmap, int index);
 static int get_bit_at_index(char *bitmap, int index);
+static void set_free_bit_at_index(char *bitmap, int index);
 
 #endif

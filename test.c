@@ -16,7 +16,23 @@ static int get_bit_at_index(char *bitmap, int index)
     
     return (int)(*region >> (index % 8)) & 0x1;
 }
+static void set_bit_at_index(char *bitmap, int index)
+{
+    // We first find the location in the bitmap array where we want to set a bit
+    // Because each character can store 8 bits, using the "index", we find which 
+    // location in the character array should we set the bit to.
+    char *region = ((char *) bitmap) + (index / 8);
+    
+    // Now, we cannot just write one bit, but we can only write one character. 
+    // So, when we set the bit, we should not distrub other bits. 
+    // So, we create a mask and OR with existing values
+    char bit = 1 << (index % 8);
 
+    // just set the bit to 1. NOTE: If we want to free a bit (*bitmap_region &= ~bit;)
+    *region &= ~bit;
+   
+    return;
+}
 
 
 
@@ -48,7 +64,7 @@ that aren't 8 bits long but 7. So, the 8th bit will not be used. Thus, we skip i
     //Let's try to read 17th bit)
     printf("Example 3: The value at 17th location %d\n", get_bit_at_index(bitmap, 0)); 
 		int i =0;
-		
+		set_bit_at_index(bitmap, 0);
 		for(i;i<31;i++){ 
 			if( (i+1) % 8 != 0){
 			printf("%d \n",get_bit_at_index(bitmap, i)); 
@@ -58,10 +74,6 @@ that aren't 8 bits long but 7. So, the 8th bit will not be used. Thus, we skip i
 			}
 		}
     
-		int bigggg = (((653 << 10) |558)<< 12) | 2613;
-		unsigned int huge  = 2741168693;
-		printf("%u \n", huge);
-
 
 		return 0;
 
