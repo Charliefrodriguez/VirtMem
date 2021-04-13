@@ -12,7 +12,7 @@
 //Add any important includes here which you may need
 
 #define PGSIZE 4096
-
+//#define PGSIZE 8192
 #define TLB_ENTRIES 512
 
 // Maximum size of virtual memory
@@ -38,7 +38,8 @@ struct tlb {
 int empty;
     int lastIn;
     unsigned int pfn;
-    unsigned int dirIndex;
+    unsigned int page_frame_pos;
+		unsigned int dirIndex;
     unsigned int tableIndex;
 };
 struct tlb tlb_store;

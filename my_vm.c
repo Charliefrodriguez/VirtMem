@@ -9,6 +9,7 @@ struct tlb TLB[TLB_ENTRIES];
 pthread_mutex_t lock; 
 int TLB_misess = 0; 
 int TLB_calls = 0;
+int TLB_hits = 0;
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -39,6 +40,7 @@ void set_physical_mem() {
 	for(int i = 0; i < TLB_ENTRIES; ++i) {
 				TLB[i].empty = 0;
 				TLB[i].dirIndex = 0;
+				TLB[i].page_frame_pos=0;
 				TLB[i].tableIndex = 0;
 				TLB[i].pfn = 0;
 	}
@@ -56,7 +58,7 @@ void set_physical_mem() {
  */
 int add_TLB(void *va, void *pa)
 {
- unsigned int pfn = ((unsigned int)pa)  >> 12;
+ unsigned int pfn = ((unsigned int)pa) >> (unsigned int)log2(PGSIZE);
 	
  
 
@@ -65,7 +67,9 @@ int add_TLB(void *va, void *pa)
 				TLB[i].empty = 1;
 				TLB[i].dirIndex = get_top_10_bits(((unsigned int)va));
 				TLB[i].tableIndex = get_mid_10_bits((unsigned int)va);
+				TLB[i].page_frame_pos = get_last_12_bits((unsigned int)va);
 				TLB[i].pfn = pfn;
+				return 1;
 		}
 	}
 
@@ -75,6 +79,7 @@ int add_TLB(void *va, void *pa)
 	
 				TLB[kick_out].dirIndex = get_top_10_bits((unsigned int)va);
 				TLB[kick_out].tableIndex = get_mid_10_bits((unsigned int)va);
+				TLB[kick_out].page_frame_pos = get_last_12_bits((unsigned int)va);
 				TLB[kick_out].pfn = pfn;
 
 
@@ -109,8 +114,11 @@ check_TLB(void *va) {
 unsigned int addr = (unsigned int )va;
 	unsigned int top = get_top_10_bits(addr);
 	unsigned int mid = get_mid_10_bits(addr);
+	unsigned int bot = get_last_12_bits(addr);
+
 	for(int i = 0; i < TLB_ENTRIES; ++i) { 
-		if(TLB[i].dirIndex == top && TLB[i].tableIndex == mid) {
+		if(TLB[i].dirIndex == top && TLB[i].tableIndex == mid && TLB[i].page_frame_pos == bot ) {
+					TLB_hits++;
 					return (pte_t *)TLB[i].pfn; // return pfn
 		}
 	} 
@@ -140,6 +148,7 @@ print_TLB_missrate()
 
 	miss_rate = ((float)TLB_misess)/((float)TLB_calls);
 
+		fprintf(stderr, "TLB hits  %d, TLB misses %d TLB calls total %d \n", TLB_hits, TLB_misess,TLB_calls  );
 
 	fprintf(stderr, "TLB miss rate %lf \n", miss_rate);
 }
@@ -176,7 +185,7 @@ pte_t *translate(pde_t *pgdir, void *va) {
 
 	unsigned long pfn = (unsigned long)(*pg_ptr); 
 
-	pte_t * output = (pte_t *)((pfn  << 12) | bot);
+	pte_t * output = (pte_t *)((pfn  << (unsigned int)log2(PGSIZE) | bot));
 	 pthread_mutex_unlock(&lock);
  	
 	return output;
@@ -257,16 +266,18 @@ void *a_malloc(unsigned int num_bytes) {
 					// decompose number into array matrix i,j values
 					unsigned int top = floor(j/PGSIZE); 
 					unsigned int mid =  j % PGSIZE; 
-				
+					unsigned int bot = (unsigned int)log2(PGSIZE); 
 					pde_t * dir_ptr = (pde_t *)physMem; // we point dir_ptr to start of page dir 
-					
-					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025); // we then jump 1024+1 entries to the first spot in physical mem after page dir
+					unsigned int top_bits = floor((32-bot)/2);
+					pte_t * page_table_i = (pte_t *)(dir_ptr + (long unsigned int )pow(2,top) +1); // we then jump 2^(top bits)+1 entries to the first spot in physical mem after page dir
 					
 					*(page_table_i+mid) = (pte_t)(pfn); // we then iterate into this space which is the first page table, and store the pfn here
 				
 					*(dir_ptr+top) = (pde_t)page_table_i;			  // we then store a ptr to the strat of the page table piece containing the pf number
-					
-					void * output =   (void*)( (((top << 10) | mid) << 12) | offset );
+				
+					unsigned int mid_bit = floor((32-bot)/2) + (32-bot)%2 ; 
+	
+					void * output =   (void*)( (((top << mid_bit) | mid) << bot) | offset );
 
 					pthread_mutex_unlock(&lock);
 					return output;
@@ -310,7 +321,7 @@ void *a_malloc(unsigned int num_bytes) {
 					
 					pde_t * dir_ptr = (pde_t *)physMem; 
 					
-					pte_t * page_table_i = (pte_t *)(dir_ptr + 1025);// increments to where first page table starts
+					pte_t * page_table_i = (pte_t *)(dir_ptr + (long unsigned int ) pow(2,top) +1);// increments to where first page table starts
 
 /* 
 top represents the rows we need to jump, where each row represents some porition of the page table 
@@ -322,8 +333,12 @@ governed by a page directory entry, we jump in blocks of 2^12 because that is ho
 					*(page_table_i+mid) = (pte_t)(pfn); // store pfn value in the page table entry 
 				
 					*(dir_ptr+top) = (pde_t)page_table_i;			  // store pointer to page_table_i in dir ptr
-					
-					void * output =   (void*)( (((top << 10) | mid) << 12) | offset );
+						unsigned int bot = (unsigned int)log2(PGSIZE); 
+					unsigned int mid_bit = floor((32-bot)/2) + (32-bot)%2 ; 
+	
+					void * output =   (void*)( (((top << mid_bit) | mid) << bot) | offset );
+
+					//void * output =   (void*)( (((top << 10) | mid) << 12) | offset );
 					pthread_mutex_unlock(&lock);
 
 				return output;
@@ -365,7 +380,7 @@ void a_free(void *va, int size) {
 
 
 
-	unsigned long pfn =  phys_addr >> 12; 
+	unsigned long pfn =  phys_addr >> (unsigned int)log2(PGSIZE); 
 
 
 
@@ -430,7 +445,7 @@ void put_value(void *va, void *val, int size) {
 unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
 		pthread_mutex_lock(&lock);
 
-	unsigned long pfn =  phys_addr >> 12; 
+	unsigned long pfn =  phys_addr >> (unsigned int)log2(PGSIZE); 
 
 
 				char * ptr = physMem; 
@@ -469,7 +484,7 @@ void get_value(void *va, void *val, int size) {
 	else{
 	unsigned long phys_addr = (unsigned long)(translate( (pde_t *) physMem , va)); 
 //	pthread_mutex_lock(&lock);
-	pfn =  phys_addr >> 12; 
+	pfn =  phys_addr >> (unsigned int)log2(PGSIZE); 
 	}
 
 				char * ptr = physMem; 
@@ -542,13 +557,19 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
 }
 
 static unsigned int get_top_10_bits(unsigned int value){   
-    return (value >> 22);
+    unsigned int bot = (unsigned int)log2(PGSIZE); 
+		unsigned int back = floor((32-bot)/2) + (32-bot)%2 + bot; 
+		return (value >> back);
+		//return (value >> 22);
 }
 
 static unsigned int get_mid_10_bits(unsigned int value){
    unsigned int mid_bits_value = 0;   
-   value =    value >> 12; 
-   unsigned int outer_bits_mask =   (1 << 10);  
+   //value =    value >> 12; 
+   unsigned int bot = (unsigned int)log2(PGSIZE); 
+	 unsigned int mid = floor((32-bot)/2) + (32-bot)%2 ; 
+	 value = value >> (unsigned int)log2(PGSIZE);
+	 unsigned int outer_bits_mask =   (1 << mid);  
    outer_bits_mask = outer_bits_mask-1;
    mid_bits_value =  value &  outer_bits_mask;
    return mid_bits_value;
@@ -557,8 +578,9 @@ static unsigned int get_mid_10_bits(unsigned int value){
 
 static unsigned int get_last_12_bits(unsigned int value){
    unsigned int mid_bits_value = 0;
-   value = value >> 0;
-   unsigned int outer_bits_mask =  (1 << 12);
+   value = value >> 0; 
+
+   unsigned int outer_bits_mask =  (1 << (unsigned int)log2(PGSIZE));
    outer_bits_mask = outer_bits_mask-1;
    mid_bits_value =  value &  outer_bits_mask;
    return mid_bits_value;
