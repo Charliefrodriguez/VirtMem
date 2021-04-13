@@ -253,19 +253,25 @@ void *a_malloc(unsigned int num_bytes) {
 				
 				unsigned long offset = 0; 
 
-				int j = 1;  
-				// find first open slot in first availible page table
-				for(j;j<524288;j++){	
-						if(get_bit_at_index(virtBM, j) == 0) { 
+				unsigned long j = 1;  
+				
+				unsigned long top_bound = pow(2,32-log2(PGSIZE));
+				for(j;j<top_bound;j++){
+				if(get_bit_at_index(virtBM, j) == 0) { 
 								set_bit_at_index(virtBM, j);
 							break;
 						}
 					} 
 					
 					
-					// decompose number into array matrix i,j values
-					unsigned int top = floor(j/PGSIZE); 
-					unsigned int mid =  j % PGSIZE; 
+					/* 
+					decompose number val into indicies i,j , where i<= total # pde entries, and j <= total #pte entries per page
+					Thus, the total number of different values would be i*j total pde entires * total pte entires = # virt addresses total
+					*/
+					unsigned pte_per_page = PGSIZE/4; // page table entries per page
+					unsigned int top = floor(j/pte_per_page); 
+					unsigned int mid =  j % pte_per_page; 
+					
 					unsigned int bot = (unsigned int)log2(PGSIZE); 
 					pde_t * dir_ptr = (pde_t *)physMem; // we point dir_ptr to start of page dir 
 					unsigned int top_bits = floor((32-bot)/2);
@@ -305,19 +311,21 @@ void *a_malloc(unsigned int num_bytes) {
 				ptr = physMem + MEMSIZE-1 - i*PGSIZE;  // decrement backwards to next open physical frame 
 				
 				unsigned long offset = 0; 
-				int j = 1;  
 				// find first open slot in first availible page table
-
-				for(j;j<524288;j++){	
-						if(get_bit_at_index(virtBM, j) == 0) { 
+			
+				unsigned long j = 1;  
+				
+				unsigned long top_bound = pow(2,32-log2(PGSIZE));
+				for(j;j<top_bound;j++){
+				if(get_bit_at_index(virtBM, j) == 0) { 
 								set_bit_at_index(virtBM, j);
 							break;
 						}
 					} 
-	
-					// decompose number into array matrix i,j values
-					unsigned int top = floor(j/PGSIZE); 
-					unsigned int mid =  j % PGSIZE; 
+								// decompose number into array matrix i,j values
+					unsigned pte_per_page = PGSIZE/4; // page table entries per page
+					unsigned int top = floor(j/pte_per_page); 
+					unsigned int mid =  j % pte_per_page; 
 					
 					pde_t * dir_ptr = (pde_t *)physMem; 
 					
